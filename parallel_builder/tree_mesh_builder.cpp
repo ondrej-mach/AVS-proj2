@@ -39,7 +39,7 @@ void TreeMeshBuilder::computeDivision(
 
 
             if (!nodeEmpty(field, childOrigin, childSize)) {
-                #pragma omp task
+                #pragma omp task shared(field, triangleCount) firstprivate(childOrigin, childSize)
                 computeDivision(field, childOrigin, childSize, triangleCount);
             }
         }

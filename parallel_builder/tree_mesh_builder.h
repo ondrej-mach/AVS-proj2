@@ -22,11 +22,17 @@ public:
 
 protected:
     unsigned marchCubes(const ParametricScalarField &field);
-    unsigned processDivision(const ParametricScalarField &field, const Vec3_t<float> &origin, const unsigned size);
+    bool nodeEmpty(const ParametricScalarField &field, const Vec3_t<float> &origin, const float size);
+    void computeDivision(const ParametricScalarField &field,
+                         const Vec3_t<float> origin,
+                         const unsigned size,
+                         unsigned &triangleCount
+                         );
     float evaluateFieldAt(const Vec3_t<float> &pos, const ParametricScalarField &field);
     void emitTriangle(const Triangle_t &triangle);
     const Triangle_t *getTrianglesArray() const { return mTriangles.data(); }
 
+    const float divisionCutoff = 1;
     std::vector<Triangle_t> mTriangles; ///< Temporary array of triangles
 };
 

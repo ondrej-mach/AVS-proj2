@@ -21,14 +21,13 @@ TreeMeshBuilder::TreeMeshBuilder(unsigned gridEdgeSize)
 }
 
 
-unsigned TreeMeshBuilder::processDivision(
+void TreeMeshBuilder::computeDivision(
     const ParametricScalarField &field,
-    const Vec3_t<float> &origin,
-    const unsigned size)
+    const Vec3_t<float> origin,
+    const unsigned size,
+    unsigned &triangleCount)
 {
-    unsigned totalTriangles = 0;
-
-    if (size > mGridResolution) {
+    if (size > divisionCutoff) {
         unsigned childSize = size / 2; // We assume a power of 2
 
         for (auto normOffset: sc_vertexNormPos) {
@@ -37,23 +36,34 @@ unsigned TreeMeshBuilder::processDivision(
                 origin.y + normOffset.y * childSize,
                 origin.z + normOffset.z * childSize
             );
-            Vec3_t<float> childCenter(
-                (childOrigin.x + (float)childSize/2.f) * mGridResolution,
-                (childOrigin.y + (float)childSize/2.f) * mGridResolution,
-                (childOrigin.z + (float)childSize/2.f) * mGridResolution
-            );
-            float fieldValue = evaluateFieldAt(childCenter, field);
 
-            if (fieldValue > mIsoLevel + sqrt(3)/2 * childSize * mGridResolution) {
-                totalTriangles += processDivision(field, childOrigin, childSize);
+
+            if (!nodeEmpty(field, childOrigin, childSize)) {
+                #pragma omp task
+                computeDivision(field, childOrigin, childSize, triangleCount);
             }
         }
 
     } else {
-        totalTriangles += buildCube(origin, field);
+        #pragma omp atomic
+        triangleCount += buildCube(origin, field);
     }
-    return totalTriangles;
 }
+
+
+bool TreeMeshBuilder::nodeEmpty(const ParametricScalarField &field, const Vec3_t<float> &origin, const float size)
+{
+	Vec3_t<float> center(
+                (origin.x + size/2.f) * mGridResolution,
+                (origin.y + size/2.f) * mGridResolution,
+                (origin.z + size/2.f) * mGridResolution
+            );
+
+    float fieldValue = evaluateFieldAt(center, field);
+
+	return fieldValue > mIsoLevel + sqrt(3)/2 * size * mGridResolution;
+}
+
 
 unsigned TreeMeshBuilder::marchCubes(const ParametricScalarField &field)
 {
@@ -62,9 +72,15 @@ unsigned TreeMeshBuilder::marchCubes(const ParametricScalarField &field)
     // It is also strongly suggested to first implement Octree as sequential
     // code and only when that works add OpenMP tasks to achieve parallelism.
 
-    unsigned totalTriangles = 0;
+    unsigned totalTriangles;
     Vec3_t<float> origin(0, 0, 0);
-    return processDivision(field, origin, mGridSize);
+
+    #pragma omp parallel
+    #pragma omp single
+    computeDivision(field, origin, mGridSize, totalTriangles);
+    #pragma omp taskwait
+
+    return totalTriangles;
 }
 
 float TreeMeshBuilder::evaluateFieldAt(const Vec3_t<float> &pos, const ParametricScalarField &field)

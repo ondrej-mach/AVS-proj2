@@ -32,7 +32,7 @@ protected:
     void emitTriangle(const Triangle_t &triangle);
     const Triangle_t *getTrianglesArray() const { return mTriangles.data(); }
 
-    const float divisionCutoff = 1;
+    const unsigned divisionCutoff = 2;
     std::vector<Triangle_t> mTriangles; ///< Temporary array of triangles
 };
 

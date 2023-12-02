@@ -1,0 +1,106 @@
+Architektury Výpočetních Systémů (AVS 2023)
+Projekt č. 2 (PMC)
+Login: xmacho12
+
+Úloha 1: Paralelizace původního řešení
+===============================================================================
+
+1) Kterou ze smyček (viz zadání) je vhodnější paralelizovat a co způsobuje 
+   neefektivitu paralelizaci té druhé?
+
+   Paralelizace smyčky v metodě marchCubes dává výrazně lepší výsledek.
+   To také potvrzuje pravidlo, že bychom měli paralelizovat vnější smyčku (pokud má dostatek iterací, aby využila všechna vlákna procesoru).
+   Paralelizace druhé smyčky je neefektivní, protože každé vlákno udělá poměrně malý výpočet a potom musí čekat na synchronizaci.
+   Smyčka uvnitř evaluateFieldAt byla zrychlena direktivou SIMD pro zrychlení výpočtu (nijak neovlivní srovnání škálování paralelního loop a octree).
+
+2) Jaké plánování (rozdělení práce mezi vlákna) jste zvolili a proč? 
+   Jaký vliv má velikost "chunk" při dynamickém plánování (8, 16, 32, 64)?
+
+   Testováním bylo zjištěno, že vliv plánování na rychlost programu je zcela minimální.
+   Bylo zvoleno dynamické plánování, protože obecně nelze předpokládat, že každá iterace smyčky zabere stejný čas.
+   Velikost chunku se také ukazala jako nepodstatná, takže byla zvolena velikost 64 pro minimalizaci režrie.
+
+3) Jakým způsobem zajišťujete ukládání trojúhelníků z několika vláken současně?
+
+   Přidávání nových prvků do vektoru mTriangles probíhá v kritické sekci (#pragma omp critical).
+   To zaručí, že do vektoru nikdy nebudou přistupovat dvě vlákna současně.
+
+
+Úloha 2: Paralelní průchod stromem
+===============================================================================
+
+1) Stručně popište použití OpenMP tasků ve vašem řešení.
+
+   Byla implementována funkce computeDivision, která rozděluje prostor na osminy a rekurzivně se volá na nové divize.
+   Každé rekurzivní volání computeDivision je počítáno paralelně - toho je docíleno pomocí openMP tasku.
+   Podmínkou ukončení je dosažení dostatečně malého dílku (cut-off hodnota), poté už jsou vygenerovány trojúhelníky.
+
+2) Jaký vliv má na vaše řešení tzv. "cut-off"? Je vhodné vytvářet nový 
+   task pro každou krychli na nejnižší úrovni?
+
+   Experimentálně bylo zjištěno, že hodnota 2 dává nejlepší výsledky.
+   Pokud nastavíme cut-off moc nízký (1), režie vytváření nových vláken se projeví na čase.
+   Pokud nastaviíme cut-off příliš vysoký (>=2), metoda buildCubes se volá zbytečně, což taky zhoršuje výkon.
+
+3) Jakým způsobem zajišťujete ukládání trojúhelníků z několika vláken současně?
+
+   Stejně jako u paralelní loop implementace.
+
+
+Úloha 3: Grafy škálování všech řešení
+===============================================================================
+
+1) Stručně zhodnoťte efektivitu vytvořených řešení (na základě grafů ŠKÁLOVÁNÍ).
+
+   Z grafu závislosti času na počtu prvků mřížky (Grid size scaling) je patrné že větší vstup se bude počítat delší dobu.
+   Také je vidět, že algoritmus octree je stejně rychlý pro malé vstupy jako paralelní loop, ale škáluje lépe.
+   U paralelního loop algoritmu roste čas vzhledem k velikosti vstupu přibližně lineárně.
+
+   Na grafu silného škálování je opět vidět, že algoritmus octree je obecně rychlejší.
+   Je zde vidět optimální počet jader pro nejrychlejší výpočet - čím větší je problém, tím více jader dokáže efektivně využít.
+   Pokud algoritmus dostane více vláken, než je pro daný problém optimální, výpočet trvá déle kvůli zhoršené lokolitě dat
+
+   Na grafu slabého škálování je vidět, že paralelní loop algoritmus škáluje přibližně konstantně, zatímco octree má horší slabé škálování.
+
+2) V jakém případě (v závislosti na počtu bodů ve vstupním souboru a velikosti 
+   mřížky) bude vaše řešení 1. úlohy neefektivní? (pokud takový případ existuje)
+
+   Pokud přidělíme velký počet vláken ale malý vstup, efektivita bude nejhorší.
+
+3) Je (nebo není) stromový algoritmus efektivnější z pohledu slabého škálování 
+   vzhledem ke vstupu?
+
+   Z pohledu slabého škálování je méně efektivní z pohledu slabého škálování.
+   To je z důvodu, že častěji využívá pouze jedno vlákno.
+   (Zatímco paralelní loop po celou dobu smyčky vytěžuje všechna vlákna naplno)
+
+4) Jaký je rozdíl mezi silným a slabým škálováním?
+
+   Silné škálování znamená, že přidání více vláken povede k úměrnému zrychlení algoritmu.
+   Oproti tomu při slabém škálování nová vlákna program nezrychlí, ale umožní zpracovat úměrně větší vstup při stejném čase.
+   Silné škálování je popsáno Amdahlovým zákonem, slabé škálování Gustafsonovým zákonem.
+
+Úloha 4: Analýza využití jader pomocí VTune
+================================================================================
+
+1) Jaké bylo průměrné využití jader pro všechny tři implementace s omezením na 
+   18 vláken? Na kolik procent byly využity?
+   
+   ref:   2.8%
+   loop: 48.3%
+   tree: 43.5%
+
+   Poznámka: při využití 16 jader by ideální vytížení bylo 50%
+
+2) Jaké bylo průměrné využití jader pro všechny tři implementace s využitím 
+   všech jader? Na kolik procent se podařilo využít obě CPU?
+   
+   ref:   2.8%
+   loop: 90.6%
+   tree: 70.4%
+
+3) Jaké jsou závěry z těchto měření?
+
+Referenční algoritmus využívá pouze jedno jádro na plný výkon, a využití 2.8% tomu přesně odpovídá (cca 1/36).
+Paralelní loop algoritmus poměrně dobře vytíží všechna jádra, ale počítá na nich zbytečné výpočty (kostky, ve kterých nemohou být trojúhelníky).
+Octree algoritmus prořezává strom, tím ale přidává čas strávený v menším počtu vláken.

@@ -43,10 +43,22 @@ void TreeMeshBuilder::computeDivision(
                 computeDivision(field, childOrigin, childSize, triangleCount);
             }
         }
+        #pragma omp taskwait
 
     } else {
+        size_t cubesCount = size*size*size;
+        unsigned localTriangles = 0;
+
+        // Do this single thread, this is already beyond cut-off
+        for(size_t i = 0; i < cubesCount; ++i) {
+            Vec3_t<float> cubeOffset(origin.x + i % size,
+                                     origin.y + (i / size) % size,
+                                     origin.z + i / (size*size));
+
+            localTriangles += buildCube(cubeOffset, field);
+        }
         #pragma omp atomic
-        triangleCount += buildCube(origin, field);
+        triangleCount += localTriangles;
     }
 }
 
@@ -67,18 +79,12 @@ bool TreeMeshBuilder::nodeEmpty(const ParametricScalarField &field, const Vec3_t
 
 unsigned TreeMeshBuilder::marchCubes(const ParametricScalarField &field)
 {
-    // Suggested approach to tackle this problem is to add new method to
-    // this class. This method will call itself to process the children.
-    // It is also strongly suggested to first implement Octree as sequential
-    // code and only when that works add OpenMP tasks to achieve parallelism.
-
-    unsigned totalTriangles;
+    unsigned totalTriangles = 0;
     Vec3_t<float> origin(0, 0, 0);
 
     #pragma omp parallel
-    #pragma omp single
+    #pragma omp single nowait
     computeDivision(field, origin, mGridSize, totalTriangles);
-    #pragma omp taskwait
 
     return totalTriangles;
 }
